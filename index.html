@@ -387,6 +387,22 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .status-chip.done{background:var(--greenL);color:var(--green)}
 .bill-btn{background:var(--greenL);color:var(--green);border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;margin-top:8px}
 
+/* ── PIN ── */
+.pd{
+  width:14px;height:14px;border-radius:50%;
+  border:2px solid var(--stone2);background:transparent;
+  display:inline-block;transition:all .15s;
+}
+.pd.filled{background:var(--accent);border-color:var(--accent);}
+.pin-btn{
+  border:1.5px solid var(--stone);background:#fff;border-radius:14px;
+  padding:16px;font-size:20px;font-weight:500;color:var(--ink);
+  transition:all .12s;-webkit-tap-highlight-color:transparent;
+}
+.pin-btn:active{background:var(--warm);transform:scale(.93);}
+.pin-cancel{font-size:12px;color:var(--ink3);}
+.pin-del{font-size:18px;}
+
 /* ════════════════════════════════════════════
    BILL / RECEIPT
 ════════════════════════════════════════════ */
@@ -595,6 +611,33 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
   <button class="pay-done-btn" id="pay-done-btn" onclick="payDone()">✓ ชำระเงินแล้ว</button>
 </div>
 
+<!-- PIN OVERLAY -->
+<div class="overlay hidden" id="pin-overlay">
+  <div class="sheet" style="text-align:center;padding:28px 24px 44px">
+    <div class="sheet-handle"></div>
+    <div style="font-size:13px;color:var(--ink3);margin-bottom:4px" id="pin-hint">รหัส 4 หลัก</div>
+    <div style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:20px" id="pin-title">Admin</div>
+    <div style="display:flex;gap:14px;justify-content:center;margin-bottom:20px" id="pin-dots">
+      <span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span>
+    </div>
+    <div style="font-size:12px;color:var(--red);min-height:18px;margin-bottom:14px" id="pin-err"></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto">
+      <button class="pin-btn" onclick="pinPress('1')">1</button>
+      <button class="pin-btn" onclick="pinPress('2')">2</button>
+      <button class="pin-btn" onclick="pinPress('3')">3</button>
+      <button class="pin-btn" onclick="pinPress('4')">4</button>
+      <button class="pin-btn" onclick="pinPress('5')">5</button>
+      <button class="pin-btn" onclick="pinPress('6')">6</button>
+      <button class="pin-btn" onclick="pinPress('7')">7</button>
+      <button class="pin-btn" onclick="pinPress('8')">8</button>
+      <button class="pin-btn" onclick="pinPress('9')">9</button>
+      <button class="pin-btn pin-cancel" onclick="closePIN()">ยกเลิก</button>
+      <button class="pin-btn" onclick="pinPress('0')">0</button>
+      <button class="pin-btn pin-del" onclick="pinPress('del')">⌫</button>
+    </div>
+  </div>
+</div>
+
 <!-- FORM OVERLAY -->
 <div class="overlay hidden" id="form-overlay" onclick="closeForm(event)">
   <div class="form-sheet" id="form-sheet" onclick="event.stopPropagation()">
@@ -672,6 +715,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 // DATA
 // ══════════════════════════════════════════
 const TABLE = "B3";
+let TABLE_CURRENT = TABLE;
 const CATS = [
   {id:"all",   th:"ทั้งหมด",      en:"All"},
   {id:"sig",   th:"ซิกเนเจอร์",   en:"Signature"},
@@ -719,16 +763,68 @@ let payMethod="cash", billOrderId=null;
 const SCREENS=["role-screen","scan-screen","customer-app","kitchen-app","admin-app","bill-app"];
 function show(id){SCREENS.forEach(s=>document.getElementById(s).classList.add("hidden"));document.getElementById(id).classList.remove("hidden")}
 
+// ── PIN Modal ──────────────────────────────
+const ADMIN_PIN = "1234";   // เปลี่ยนรหัสได้ที่นี่
+const KITCHEN_PIN = "0000"; // เปลี่ยนรหัสได้ที่นี่
+let pendingRole = null;
+
 function goRole(r){
   if(r==="role") show("role-screen");
   else if(r==="scan"){
-    // ข้ามหน้าสแกน เปิดเมนูทันที
     show("customer-app");
     showCtab("menu");renderCats();renderMenu();updateCartBar();
   }
-  else if(r==="kitchen"){show("kitchen-app");updateKitchen();}
-  else if(r==="admin"){show("admin-app");renderAdmin();}
+  else if(r==="kitchen"){ pendingRole="kitchen"; showPIN("Kitchen Display","รหัส 4 หลัก"); }
+  else if(r==="admin"){   pendingRole="admin";   showPIN("Admin จัดการเมนู","รหัส 4 หลัก"); }
 }
+
+function showPIN(title, hint){
+  const overlay = document.getElementById("pin-overlay");
+  document.getElementById("pin-title").textContent = title;
+  document.getElementById("pin-hint").textContent = hint;
+  document.getElementById("pin-dots").innerHTML = '<span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span>';
+  document.getElementById("pin-err").textContent = "";
+  pinVal = "";
+  overlay.classList.remove("hidden");
+}
+
+let pinVal = "";
+function pinPress(v){
+  if(v==="del"){ pinVal=pinVal.slice(0,-1); }
+  else if(pinVal.length<4){ pinVal+=v; }
+  // update dots
+  const dots = document.querySelectorAll(".pd");
+  dots.forEach((d,i)=>{ d.classList.toggle("filled", i<pinVal.length); });
+  if(pinVal.length===4){ setTimeout(checkPIN,120); }
+}
+function checkPIN(){
+  const correct = pendingRole==="admin" ? ADMIN_PIN : KITCHEN_PIN;
+  if(pinVal===correct){
+    document.getElementById("pin-overlay").classList.add("hidden");
+    if(pendingRole==="kitchen"){ show("kitchen-app"); updateKitchen(); }
+    else { show("admin-app"); renderAdmin(); }
+  } else {
+    document.getElementById("pin-err").textContent = "รหัสไม่ถูกต้อง ลองใหม่";
+    pinVal="";
+    document.querySelectorAll(".pd").forEach(d=>d.classList.remove("filled"));
+  }
+}
+function closePIN(){ document.getElementById("pin-overlay").classList.add("hidden"); }
+
+// ── Auto-route on load ──────────────────────
+window.addEventListener("DOMContentLoaded", ()=>{
+  const params = new URLSearchParams(window.location.search);
+  const tbl = params.get("table");
+  if(tbl){
+    // ลูกค้าสแกน QR มาจาก URL มีพารามิเตอร์ table
+    TABLE_CURRENT = tbl;
+    document.getElementById("tbl-lbl").textContent = tbl;
+    show("customer-app");
+    showCtab("menu"); renderCats(); renderMenu(); updateCartBar();
+  } else {
+    show("role-screen");
+  }
+});
 
 // ══════════════════════════════════════════
 // SCAN
@@ -907,7 +1003,7 @@ function updateCartBar(){
 function renderCartScreen(){
   updateCartUI();
   const cnt=cart.reduce((s,i)=>s+i.qty,0), sub=cart.reduce((s,i)=>s+i.qty*i.price,0), svc=Math.round(sub*.1);
-  document.getElementById("cart-pg-sub").textContent=(lang==="th"?"โต๊ะ":"Table")+" "+TABLE+" • "+cnt+" "+(lang==="th"?"รายการ":"items");
+  document.getElementById("cart-pg-sub").textContent=(lang==="th"?"โต๊ะ":"Table")+" "+TABLE_CURRENT+" • "+cnt+" "+(lang==="th"?"รายการ":"items");
   document.getElementById("sum-sub").textContent="฿"+sub;
   document.getElementById("sum-svc").textContent="฿"+svc;
   document.getElementById("sum-tot").textContent="฿"+(sub+svc);
@@ -946,7 +1042,7 @@ function cQty(key,d){
 function placeOrder(){
   const ord={
     id:"#"+Math.floor(Math.random()*9000+1000),
-    table:TABLE, items:[...cart],
+    table:TABLE_CURRENT, items:[...cart],
     note:document.getElementById("note-inp").value,
     time:new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}),
     status:"new", paid:false
@@ -966,7 +1062,7 @@ function placeOrder(){
   tr.innerHTML=`<span>${lang==="th"?"รวม":"Total"}</span><span>฿${total}</span>`;
   ticket.appendChild(tr);
   document.getElementById("done-t").textContent=lang==="th"?"สั่งอาหารสำเร็จ!":"Order Placed!";
-  document.getElementById("done-s").innerHTML=lang==="th"?`โต๊ะ ${TABLE} • ทางร้านได้รับออเดอร์แล้ว<br>กรุณารอสักครู่นะครับ`:`Table ${TABLE} • Order received!<br>We'll bring it to you shortly.`;
+  document.getElementById("done-s").innerHTML=lang==="th"?`โต๊ะ ${TABLE_CURRENT} • ทางร้านได้รับออเดอร์แล้ว<br>กรุณารอสักครู่นะครับ`:`Table ${TABLE_CURRENT} • Order received!<br>We'll bring it to you shortly.`;
   document.getElementById("more-btn").textContent=lang==="th"?"สั่งเพิ่ม":"Order More";
   cart=[]; document.getElementById("note-inp").value="";
   updateCartBar(); renderAdmin();
@@ -1216,43 +1312,49 @@ const TABLES = ["A1","A2","A3","A4","B1","B2","B3","B4","C1","C2","C3","C4"];
 function genQRAll(){
   const grid = document.getElementById("qr-grid-out");
   if(!grid) return;
-  const baseUrl = (document.getElementById("qr-url-inp")?.value || window.location.href).split('?')[0];
+  // ใช้ URL จาก input หรือ URL ปัจจุบัน (ตัด query string ออก)
+  const baseUrl = (document.getElementById("qr-url-inp")?.value.trim() || window.location.origin + window.location.pathname).replace(/\/$/, "");
   grid.innerHTML="";
   TABLES.forEach(tbl=>{
-    const url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'table=' + tbl;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=ffffff&color=1C1A18&margin=8&format=png`;
+    const fullUrl = baseUrl + "?table=" + tbl;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(fullUrl)}&bgcolor=ffffff&color=1C1A18&margin=10&format=png`;
     const card = document.createElement("div");
     card.className = "qr-table-card";
     card.innerHTML = `
       <div class="qr-table-num">โต๊ะ ${tbl}</div>
-      <img src="${qrUrl}" class="qr-canvas" width="140" height="140" style="border-radius:8px" onerror="this.outerHTML='<div style=padding:20px;color:var(--ink3);font-size:11px>ต้องการอินเทอร์เน็ต</div>'">
-      <div class="qr-table-url">Climax789</div>
-      <button class="qr-print-btn" onclick="printQR('${tbl}','${qrUrl}')">🖨️ พิมพ์</button>
+      <img src="${qrUrl}" width="140" height="140" style="border-radius:8px;display:block;margin:0 auto 8px" onerror="this.outerHTML='<div style=padding:20px;color:var(--ink3);font-size:11px;text-align:center>ต้องเชื่อมต่ออินเทอร์เน็ต</div>'">
+      <div class="qr-table-url" style="font-size:9px;color:var(--ink3);word-break:break-all;margin-bottom:8px">${fullUrl}</div>
+      <button class="qr-print-btn" onclick="printQR('${tbl}','${encodeURIComponent(fullUrl)}')">🖨️ พิมพ์</button>
     `;
     grid.appendChild(card);
   });
 }
 
-function printQR(table, qrUrl){
-  const win = window.open('','_blank','width=400,height=500');
+function printQR(table, encodedUrl){
+  const fullUrl = decodeURIComponent(encodedUrl);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(fullUrl)}&bgcolor=ffffff&color=1C1A18&margin=12&format=png`;
+  const win = window.open('','_blank','width=420,height=560');
   win.document.write(`
     <html><head><title>QR โต๊ะ ${table}</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet">
     <style>
-      body{font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fff;padding:20px}
-      .shop{font-size:28px;font-weight:700;margin-bottom:4px;color:#1C1A18}
-      .sub{font-size:13px;color:#A09890;margin-bottom:20px;letter-spacing:1px}
-      img{border-radius:12px;margin-bottom:16px}
-      .tbl{font-size:22px;font-weight:700;color:#C8601A;margin-bottom:6px}
-      .hint{font-size:12px;color:#A09890;text-align:center}
-      @media print{body{padding:0}}
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#fff;padding:30px;text-align:center}
+      .shop{font-family:'DM Serif Display',serif;font-size:32px;color:#1C1A18;margin-bottom:4px}
+      .sub{font-size:12px;color:#A09890;letter-spacing:2px;text-transform:uppercase;margin-bottom:24px}
+      .qr-box{border:2px solid #F0E6D8;border-radius:20px;padding:20px;margin-bottom:20px}
+      img{display:block;border-radius:10px}
+      .tbl{font-family:'DM Serif Display',serif;font-size:28px;color:#C8601A;margin-bottom:6px}
+      .hint{font-size:13px;color:#A09890;line-height:1.6}
+      @media print{@page{margin:10mm}body{padding:0}}
     </style></head>
     <body>
       <div class="shop">Climax789</div>
       <div class="sub">สแกนเพื่อสั่งอาหาร</div>
-      <img src="${qrUrl}" width="200" height="200">
+      <div class="qr-box"><img src="${qrUrl}" width="220" height="220"></div>
       <div class="tbl">โต๊ะ ${table}</div>
-      <div class="hint">สแกน QR Code นี้<br>เพื่อดูเมนูและสั่งอาหาร</div>
-      <script>window.onload=()=>window.print()<\/script>
+      <div class="hint">สแกน QR Code นี้เพื่อดูเมนู<br>และสั่งอาหารได้เลย</div>
+      <script>window.onload=()=>setTimeout(()=>window.print(),500)<\/script>
     </body></html>
   `);
   win.document.close();
