@@ -449,7 +449,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
       </div>
       <div class="role-info">
         <div class="role-name">เปิดเมนูสั่งอาหาร</div>
-        <div class="role-desc">สำหรับลูกค้า — กดเพื่อเปิดเมนูทันที</div>
+        <div class="role-desc">สำหรับลูกค้า — เปิดเมนูทันที</div>
       </div>
       <span class="role-arrow">›</span>
     </button>
@@ -460,7 +460,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
       </div>
       <div class="role-info">
         <div class="role-name">Kitchen Display</div>
-        <div class="role-desc">สำหรับครัว — รับและจัดการออเดอร์</div>
+        <div class="role-desc">สำหรับครัว — เข้าได้เลย</div>
       </div>
       <span class="role-arrow">›</span>
     </button>
@@ -471,7 +471,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
       </div>
       <div class="role-info">
         <div class="role-name">Admin จัดการเมนู</div>
-        <div class="role-desc">เพิ่ม / แก้ไขเมนู + รูปอาหาร</div>
+        <div class="role-desc">🔒 ต้องใส่รหัสผ่าน</div>
       </div>
       <span class="role-arrow">›</span>
     </button>
@@ -764,18 +764,24 @@ const SCREENS=["role-screen","scan-screen","customer-app","kitchen-app","admin-a
 function show(id){SCREENS.forEach(s=>document.getElementById(s).classList.add("hidden"));document.getElementById(id).classList.remove("hidden")}
 
 // ── PIN Modal ──────────────────────────────
-const ADMIN_PIN = "1234";   // เปลี่ยนรหัสได้ที่นี่
-const KITCHEN_PIN = "0000"; // เปลี่ยนรหัสได้ที่นี่
+const ADMIN_PIN = "1234";   // เปลี่ยนรหัส Admin ได้ที่นี่
 let pendingRole = null;
 
 function goRole(r){
   if(r==="role") show("role-screen");
   else if(r==="scan"){
+    // ลูกค้า → เมนูทันที
     show("customer-app");
     showCtab("menu");renderCats();renderMenu();updateCartBar();
   }
-  else if(r==="kitchen"){ pendingRole="kitchen"; showPIN("Kitchen Display","รหัส 4 หลัก"); }
-  else if(r==="admin"){   pendingRole="admin";   showPIN("Admin จัดการเมนู","รหัส 4 หลัก"); }
+  else if(r==="kitchen"){
+    // ครัว → เข้าได้เลย ไม่ต้องรหัส
+    show("kitchen-app"); updateKitchen();
+  }
+  else if(r==="admin"){
+    // Admin → ต้องใส่รหัสก่อน
+    pendingRole="admin"; showPIN("Admin จัดการเมนู","รหัส 4 หลัก");
+  }
 }
 
 function showPIN(title, hint){
@@ -798,11 +804,9 @@ function pinPress(v){
   if(pinVal.length===4){ setTimeout(checkPIN,120); }
 }
 function checkPIN(){
-  const correct = pendingRole==="admin" ? ADMIN_PIN : KITCHEN_PIN;
-  if(pinVal===correct){
+  if(pinVal===ADMIN_PIN){
     document.getElementById("pin-overlay").classList.add("hidden");
-    if(pendingRole==="kitchen"){ show("kitchen-app"); updateKitchen(); }
-    else { show("admin-app"); renderAdmin(); }
+    show("admin-app"); renderAdmin();
   } else {
     document.getElementById("pin-err").textContent = "รหัสไม่ถูกต้อง ลองใหม่";
     pinVal="";
